@@ -55,14 +55,52 @@ jobs:
             echo "BUILD_SUCCESS=false" >> $GITHUB_OUTPUT
           fi
       
-      - name: Notify Discord
-        if: steps.commit_check.outputs.IS_NEW == 'true'
+      - name: Handle JAR upload
+        if: steps.commit_check.outputs.IS_NEW == 'true' && steps.build_status.outputs.BUILD_SUCCESS == 'true'
+        id: jar_upload
+        run: |
+          JAR_FILE=$(ls target/CoreProtect*.jar | head -1)
+          JAR_NAME=$(basename "$JAR_FILE")
+          JAR_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE")
+          JAR_SIZE_MB=$((JAR_SIZE / 1048576))
+          
+          echo "JAR_SIZE_MB=$JAR_SIZE_MB" >> $GITHUB_OUTPUT
+          echo "JAR_FILE=$JAR_FILE" >> $GITHUB_OUTPUT
+          echo "JAR_NAME=$JAR_NAME" >> $GITHUB_OUTPUT
+          
+          if [ $JAR_SIZE_MB -gt 8 ]; then
+            echo "LARGE_FILE=true" >> $GITHUB_OUTPUT
+            # Upload a Catbox
+            CATBOX_URL=$(curl -F "reqtype=fileupload" -F "time=2m" -F "file=@$JAR_FILE" https://catbox.moe/user/api.php)
+            echo "CATBOX_URL=$CATBOX_URL" >> $GITHUB_OUTPUT
+          else
+            echo "LARGE_FILE=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Notify Discord (Large file)
+        if: steps.commit_check.outputs.IS_NEW == 'true' && steps.build_status.outputs.BUILD_SUCCESS == 'true' && steps.jar_upload.outputs.LARGE_FILE == 'true'
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"🎉 **CoreProtect Build Disponible**\n\n✅ Commit: \`${{ github.sha }}\`\n📦 Tamaño: ${{ steps.jar_upload.outputs.JAR_SIZE_MB }}MB\n🔗 [Descargar JAR](${{ steps.jar_upload.outputs.CATBOX_URL }})\"}" \
+            ${{ secrets.DISCORD_WEBHOOK }}
+      
+      - name: Notify Discord (Small file)
+        if: steps.commit_check.outputs.IS_NEW == 'true' && steps.build_status.outputs.BUILD_SUCCESS == 'true' && steps.jar_upload.outputs.LARGE_FILE == 'false'
+        run: |
+          curl -X POST \
+            -F "payload_json={\"content\":\"🎉 **CoreProtect Build Disponible**\n\n✅ Commit: \`${{ github.sha }}\`\n📦 Tamaño: ${{ steps.jar_upload.outputs.JAR_SIZE_MB }}MB\"}" \
+            -F "files[0]=@${{ steps.jar_upload.outputs.JAR_FILE }}" \
+            ${{ secrets.DISCORD_WEBHOOK }}
+      
+      - name: Notify Discord (Build Failed)
+        if: steps.commit_check.outputs.IS_NEW == 'true' && steps.build_status.outputs.BUILD_SUCCESS != 'true'
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: ${{ job.status }}
-          title: '🚀 CoreProtect New Build'
+          status: failure
+          title: '❌ CoreProtect Build Failed'
           description: |
             Commit: `${{ github.sha }}`
-            Status: ${{ steps.build_status.outputs.BUILD_SUCCESS == 'true' && '✅ Build OK' || '❌ Build Failed' }}
-          color: ${{ steps.build_status.outputs.BUILD_SUCCESS == 'true' && '00ff00' || 'ff0000' }}
+            El build no generó JAR
+          color: ff0000
