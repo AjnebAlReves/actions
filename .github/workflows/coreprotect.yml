@@ -16,6 +16,10 @@ jobs:
           repository: PlayPro/CoreProtect
           fetch-depth: 0
       
+      - name: Set development branch in pom.xml
+        run: |
+          sed -i 's/<project\.branch>.*<\/project\.branch>/<project.branch>development<\/project.branch>/g' pom.xml
+      
       - name: Check for new commits
         id: commit_check
         run: |
@@ -41,7 +45,7 @@ jobs:
       
       - name: Build with Maven
         if: steps.commit_check.outputs.IS_NEW == 'true'
-        run: mvn clean package -DskipTests
+        run: mvn clean install -DskipTests
         continue-on-error: true
       
       - name: Check build status
