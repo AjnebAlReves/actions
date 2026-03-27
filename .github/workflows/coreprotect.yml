@@ -16,17 +16,36 @@ jobs:
           repository: PlayPro/CoreProtect
           fetch-depth: 0
       
+      - name: Check for new commits
+        id: commit_check
+        run: |
+          CURRENT_COMMIT="${{ github.sha }}"
+          LAST_FILE="$RUNNER_TEMP/last_cp_commit.txt"
+          
+          if [ -f "$LAST_FILE" ]; then
+            LAST_COMMIT=$(cat "$LAST_FILE")
+            if [ "$CURRENT_COMMIT" = "$LAST_COMMIT" ]; then
+              echo "IS_NEW=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          echo "IS_NEW=true" >> $GITHUB_OUTPUT
+          echo "$CURRENT_COMMIT" > "$LAST_FILE"
+      
       - name: Set up JDK 21
+        if: steps.commit_check.outputs.IS_NEW == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
       
       - name: Build with Maven
+        if: steps.commit_check.outputs.IS_NEW == 'true'
         run: mvn clean package -DskipTests
         continue-on-error: true
       
       - name: Check build status
+        if: steps.commit_check.outputs.IS_NEW == 'true'
         id: build_status
         run: |
           if [ -f target/CoreProtect*.jar ]; then
@@ -37,12 +56,12 @@ jobs:
           fi
       
       - name: Notify Discord
-        if: always()
+        if: steps.commit_check.outputs.IS_NEW == 'true'
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: ${{ job.status }}
-          title: '🚀 CoreProtect Daily Build'
+          title: '🚀 CoreProtect New Build'
           description: |
             Commit: `${{ github.sha }}`
             Status: ${{ steps.build_status.outputs.BUILD_SUCCESS == 'true' && '✅ Build OK' || '❌ Build Failed' }}
