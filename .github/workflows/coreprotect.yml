@@ -1,0 +1,49 @@
+name: CoreProtect Daily Build Check
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Daily at 00:00 UTC
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout CoreProtect repo
+        uses: actions/checkout@v4
+        with:
+          repository: PlayPro/CoreProtect
+          fetch-depth: 0
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+        continue-on-error: true
+      
+      - name: Check build status
+        id: build_status
+        run: |
+          if [ -f target/CoreProtect*.jar ]; then
+            echo "BUILD_SUCCESS=true" >> $GITHUB_OUTPUT
+            ls -lh target/CoreProtect*.jar
+          else
+            echo "BUILD_SUCCESS=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Notify Discord
+        if: always()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: '🚀 CoreProtect Daily Build'
+          description: |
+            Commit: `${{ github.sha }}`
+            Status: ${{ steps.build_status.outputs.BUILD_SUCCESS == 'true' && '✅ Build OK' || '❌ Build Failed' }}
+          color: ${{ steps.build_status.outputs.BUILD_SUCCESS == 'true' && '00ff00' || 'ff0000' }}
