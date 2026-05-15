@@ -11,10 +11,9 @@ jobs:
 
     steps:
       - name: Checkout CoreProtect repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: PlayPro/CoreProtect
-          ref: development
           fetch-depth: 1
 
       - name: Get CoreProtect commit
