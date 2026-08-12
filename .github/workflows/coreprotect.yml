@@ -26,7 +26,7 @@ jobs:
           sed -i 's/<project\.branch>.*<\/project\.branch>/<project.branch>development<\/project.branch>/g' pom.xml
         
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'temurin'
@@ -62,7 +62,11 @@ jobs:
 
           if [ "$JAR_SIZE_MB" -gt 8 ]; then
             echo "LARGE_FILE=true" >> $GITHUB_OUTPUT
-            CATBOX_URL=$(curl -F "reqtype=fileupload" -F "file=@$JAR_FILE" https://catbox.moe/user/api.php)
+            CATBOX_URL=$(curl -s -F "reqtype=fileupload" -F "file=@$JAR_FILE" https://catbox.moe/user/api.php)
+            # Fallback to transfer.sh if catbox returns an error like "Invalid uploader"
+            if echo "$CATBOX_URL" | grep -qi "invalid uploader\|error"; then
+              CATBOX_URL=$(curl -s --upload-file "$JAR_FILE" "https://transfer.sh/$JAR_NAME")
+            fi
             echo "CATBOX_URL=$CATBOX_URL" >> $GITHUB_OUTPUT
           else
             echo "LARGE_FILE=false" >> $GITHUB_OUTPUT
